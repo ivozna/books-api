@@ -112,4 +112,12 @@ def order_book():
 
 @app.route('/orders', methods=['GET'])
 def get_all_orders():
-    return jsonify(orders)
+    email = get_client_email(request)
+    client_orders = [order for order in orders if order['clientEmail'] == email]
+    return jsonify(client_orders)
+
+@app.route('/orders/<order_id>', methods=['GET'])
+def get_order(order_id):
+    email = get_client_email(request)
+    order = next(order for order in orders if order['clientEmail'] == email and order['id'] == order_id)
+    return jsonify(order)

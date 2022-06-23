@@ -1,3 +1,4 @@
+import json
 import random
 import string
 import time
@@ -121,3 +122,24 @@ def get_order(order_id):
     email = get_client_email(request)
     order = next(order for order in orders if order['clientEmail'] == email and order['id'] == order_id)
     return jsonify(order)
+
+@app.route('/orders/<order_id>', methods=['PUT'])
+def update_order(order_id):
+    body = dict(request.json)
+    new_name = body["customerName"]
+    email = get_client_email(request)
+    order_to_update = next(order for order in orders if order['clientEmail'] == email and order['id'] == order_id)
+    order_to_update["customerName"] = new_name
+    return jsonify(order_to_update)
+
+
+@app.route('/orders/<order_id>', methods=['DELETE'])
+def delete_order(order_id):
+    email = get_client_email(request)
+    filtered = list((index for (index, order) in enumerate(orders) if order['clientEmail'] == email and order['id'] == order_id))
+    if len(filtered) > 0:
+        index_to_delete = filtered[0]
+        del orders[index_to_delete]
+        return jsonify({"deleted": True})
+    return jsonify({"error":"there's no such order", "deleted": False})
+    

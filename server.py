@@ -3,8 +3,9 @@ import random
 import string
 import time
 from flask import Flask, request, jsonify
+import database
 
-
+database.connect()
 app = Flask("server")
 users = []
 list_of_books = [{
@@ -39,7 +40,7 @@ list_of_books = [{
 },
     {
         "id": 6,
-        "name": "Viscount Who Loved Me",
+        "name": "5",
         "type": "fiction",
         "available": True
 }
@@ -62,19 +63,15 @@ def status():
 @app.route('/books', methods=['GET'])
 def get_list_of_books():
     type = request.args.get('type', None)
-    limit = request.args.get('limit', None)
-
-    data = list(filter(lambda x: x['type'] == type if type is not None else True, list_of_books))
-    return jsonify(data[:limit])
+    limit = int(request.args.get('limit', 10))
+    books = database.get_all_books(type, limit)
+    return jsonify(books)
 
 
 @app.route('/books/<int:id>', methods=['GET'])
 def get_single_book(id):
-    for book in list_of_books:
-        if book["id"] == id:
-            return jsonify(book)
-
-    return jsonify({'status': 'not found'})
+    book = database.get_one_book(id)
+    return jsonify(book)
 
 
 @app.route('/api-clients/', methods=['POST'])
@@ -82,14 +79,30 @@ def register_api_client():
     body = dict(request.json)
     ran = ''.join(random.choices(string.ascii_uppercase + string.digits, k=64))
     register_email = body["clientEmail"]
-    for user in users:
-        if user["clientEmail"] == register_email:
-            return jsonify({
+    register_name = body["clientName"]
+    if database.client_is_registered(register_email):
+        return jsonify({
                 "error": "API client already registered. Try a different email."
             })
     body["accessToken"] = ran
-    users.append(body)
-    return jsonify({"accessToken": ran})
+    register_token = body["accessToken"]
+    new_user = database.register_client(register_name, register_email, register_token)
+    return jsonify(new_user)
+
+
+# @app.route('/api-clients/', methods=['POST'])
+# def register_api_client():
+#     body = dict(request.json)
+#     ran = ''.join(random.choices(string.ascii_uppercase + string.digits, k=64))
+#     register_email = body["clientEmail"]
+#     for user in users:
+#         if user["clientEmail"] == register_email:
+#             return jsonify({
+#                 "error": "API client already registered. Try a different email."
+#             })
+#     body["accessToken"] = ran
+#     users.append(body)
+#     return jsonify({"accessToken": ran})
 
 
 @app.route('/orders', methods=['POST'])
@@ -141,5 +154,6 @@ def delete_order(order_id):
         index_to_delete = filtered[0]
         del orders[index_to_delete]
         return jsonify({"deleted": True})
+
     return jsonify({"error":"there's no such order", "deleted": False})
     

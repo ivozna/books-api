@@ -48,12 +48,10 @@ list_of_books = [{
 orders = []
 
 
-def get_client_email(request):
-    access_token = request.headers['Authorization'][6:]
-    for user in users:
-        if access_token == user["accessToken"]:
-            return user["clientEmail"]
-    return None
+def get_client_id(request):
+    access_token = request.headers['Authorization'][7:]
+    client_id = database.get_id_with_token(access_token)
+    return client_id
 
 @app.route('/status')
 def status():
@@ -82,78 +80,68 @@ def register_api_client():
     register_name = body["clientName"]
     if database.client_is_registered(register_email):
         return jsonify({
-                "error": "API client already registered. Try a different email."
-            })
+            "error": "API client already registered. Try a different email."
+        })
     body["accessToken"] = ran
     register_token = body["accessToken"]
-    new_user = database.register_client(register_name, register_email, register_token)
+    new_user = database.register_client(
+        register_name, register_email, register_token)
     return jsonify(new_user)
-
-
-# @app.route('/api-clients/', methods=['POST'])
-# def register_api_client():
-#     body = dict(request.json)
-#     ran = ''.join(random.choices(string.ascii_uppercase + string.digits, k=64))
-#     register_email = body["clientEmail"]
-#     for user in users:
-#         if user["clientEmail"] == register_email:
-#             return jsonify({
-#                 "error": "API client already registered. Try a different email."
-#             })
-#     body["accessToken"] = ran
-#     users.append(body)
-#     return jsonify({"accessToken": ran})
 
 
 @app.route('/orders', methods=['POST'])
 def order_book():
+    user_id = get_client_id(request)
+    if user_id is None:
+        return jsonify({"error": "no authorization available, please register a client", "created": False})
+
     body = dict(request.json)
-    ran_orderid = ''.join(random.choices(
-        string.ascii_uppercase + string.digits, k=21))
-    order = {
-        'id': ran_orderid,
-        'clientEmail': get_client_email(request),
-        'quantity': 1,
-        'timestamp': int(time.time()),
-        'bookId': body["bookId"],
-        'customerName': body["customerName"]
-    }
-    orders.append(order)
-    return jsonify({
-        "created": True,
-        "orderId": order["id"]
-    })
+    book_id = body["bookId"]
+    quantity = 1
+    order = database.place_order(book_id, user_id, quantity)
+    return jsonify(order)
+
 
 @app.route('/orders', methods=['GET'])
 def get_all_orders():
-    email = get_client_email(request)
-    client_orders = [order for order in orders if order['clientEmail'] == email]
+    user_id = get_client_id(request)
+    if user_id is None:
+        return jsonify({"error": "no authorization available, please register a client", "created": False})
+
+    client_orders = database.select_all_orders(user_id)
     return jsonify(client_orders)
+
 
 @app.route('/orders/<order_id>', methods=['GET'])
 def get_order(order_id):
-    email = get_client_email(request)
-    order = next(order for order in orders if order['clientEmail'] == email and order['id'] == order_id)
+    user_id = get_client_id(request)
+    if user_id is None:
+        return jsonify({"error": "no authorization available, please register a client", "created": False})
+
+    order = database.select_one_order(user_id, order_id)
     return jsonify(order)
+
 
 @app.route('/orders/<order_id>', methods=['PUT'])
 def update_order(order_id):
+    user_id = get_client_id(request)
+    if user_id is None:
+        return jsonify({"error": "no authorization available, please register a client", "created": False})
+
     body = dict(request.json)
-    new_name = body["customerName"]
-    email = get_client_email(request)
-    order_to_update = next(order for order in orders if order['clientEmail'] == email and order['id'] == order_id)
-    order_to_update["customerName"] = new_name
+    new_quantity = body["quantity"]
+    order_to_update = database.update_order(new_quantity, user_id, order_id)
     return jsonify(order_to_update)
 
 
 @app.route('/orders/<order_id>', methods=['DELETE'])
 def delete_order(order_id):
-    email = get_client_email(request)
-    filtered = list((index for (index, order) in enumerate(orders) if order['clientEmail'] == email and order['id'] == order_id))
-    if len(filtered) > 0:
-        index_to_delete = filtered[0]
-        del orders[index_to_delete]
+    user_id = get_client_id(request)
+    if user_id is None:
+        return jsonify({"error": "no authorization available, please register a client", "created": False})
+
+    count = database.delete_one_order(user_id, order_id)
+    if count == 1:
         return jsonify({"deleted": True})
 
-    return jsonify({"error":"there's no such order", "deleted": False})
-    
+    return jsonify({"error": "there's no such order", "deleted": False})
